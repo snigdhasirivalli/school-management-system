@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - backend_db:/app/db
+      - static_volume:/app/static
+    environment:
+      - DEBUG=False
+    expose:
+      - "8000"
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api/
+    ports:
+      - "80:80"
+    volumes:
+      - static_volume:/app/django_static:ro
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  backend_db:
+  static_volume:
