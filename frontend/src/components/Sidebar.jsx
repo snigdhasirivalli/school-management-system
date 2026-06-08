@@ -23,19 +23,23 @@ function Sidebar() {
     navigate("/");
   };
 
-  const menuItems = [
-    { path: "/dashboard", label: "Dashboard", icon: "📊" },
-    { path: "/classes", label: "Classes & Sections", icon: "🏫" },
-    { path: "/teachers", label: "Teachers", icon: "🧑‍🏫" },
-    { path: "/students", label: "Students", icon: "🎓" },
-    { path: "/add-student", label: "Add Student", icon: "➕" },
-    { path: "/attendance", label: "Attendance", icon: "📅" },
-    { path: "/marks", label: "Marks & Exams", icon: "📝" },
-    { path: "/fees", label: "Fees Module", icon: "💳" },
-    { path: "/timetable", label: "Timetable", icon: "🕒" },
-    { path: "/notifications", label: "Notifications", icon: "🔔" },
-    { path: "/reports", label: "Reports", icon: "📊" }
+  const role = localStorage.getItem("role") || "student";
+
+  const allMenuItems = [
+    { path: "/dashboard", label: "Dashboard", icon: "📊", roles: ["admin", "teacher", "student"] },
+    { path: "/classes", label: "Classes & Sections", icon: "🏫", roles: ["admin"] },
+    { path: "/teachers", label: "Teachers", icon: "🧑‍🏫", roles: ["admin"] },
+    { path: "/students", label: "Students", icon: "🎓", roles: ["admin", "teacher"] },
+    { path: "/add-student", label: "Add Student", icon: "➕", roles: ["admin"] },
+    { path: "/attendance", label: "Attendance", icon: "📅", roles: ["admin", "teacher", "student"] },
+    { path: "/marks", label: "Marks & Exams", icon: "📝", roles: ["admin", "teacher", "student"] },
+    { path: "/fees", label: "Fees Module", icon: "💳", roles: ["admin", "student"] },
+    { path: "/timetable", label: "Timetable", icon: "🕒", roles: ["admin", "teacher", "student"] },
+    { path: "/notifications", label: "Notifications", icon: "🔔", roles: ["admin", "teacher", "student"] },
+    { path: "/reports", label: "Reports", icon: "📊", roles: ["admin"] }
   ];
+
+  const menuItems = allMenuItems.filter(item => item.roles.includes(role));
 
   return (
     <aside className="sidebar">

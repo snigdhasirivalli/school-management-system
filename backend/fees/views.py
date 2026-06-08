@@ -12,6 +12,11 @@ from .serializers import FeeSerializer
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_fee(request):
+    if request.user.role != 'admin':
+        return Response(
+            {"error": "Permission denied. Only admins can record payments and fee items."},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     serializer = FeeSerializer(data=request.data)
 
@@ -36,14 +41,25 @@ def get_fees(request):
     school_class_id = request.query_params.get('school_class')
     section_id = request.query_params.get('section')
 
-    fees = Fee.objects.select_related('student__user').all()
-
-    if student_id:
-        fees = fees.filter(student_id=student_id)
-    if school_class_id:
-        fees = fees.filter(student__school_class_id=school_class_id)
-    if section_id:
-        fees = fees.filter(student__section_id=section_id)
+    # Role-based restriction
+    if request.user.role == 'student':
+        if not hasattr(request.user, 'student_profile'):
+            return Response([])
+        fees = Fee.objects.select_related('student__user').filter(student=request.user.student_profile)
+    elif request.user.role == 'admin':
+        fees = Fee.objects.select_related('student__user').all()
+        if student_id:
+            fees = fees.filter(student_id=student_id)
+        if school_class_id:
+            fees = fees.filter(student__school_class_id=school_class_id)
+        if section_id:
+            fees = fees.filter(student__section_id=section_id)
+    else:
+        # Teachers should not be checking tuition fees ledger
+        return Response(
+            {"error": "Permission denied. Teachers cannot access the financial ledger."},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     serializer = FeeSerializer(
         fees,

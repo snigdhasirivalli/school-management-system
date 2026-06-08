@@ -7,6 +7,10 @@ function Fees() {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [feesLogs, setFeesLogs] = useState([]);
+  const [profile, setProfile] = useState(null);
+
+  // Synchronous role read
+  const role = localStorage.getItem("role") || "student";
 
   // Filter States
   const [filterClass, setFilterClass] = useState("");
@@ -44,22 +48,30 @@ function Fees() {
     setLoading(true);
     try {
       const token = localStorage.getItem("access");
-      const classesRes = await axios.get("students/classes/", { headers: { Authorization: `Bearer ${token}` } });
-      setClassesList(classesRes.data);
-      
-      if (classesRes.data.length > 0) {
-        const defaultClass = classesRes.data[0];
-        setFilterClass(defaultClass.id);
-        const defaultSection = defaultClass.sections.length > 0 ? defaultClass.sections[0] : null;
-        if (defaultSection) {
-          setFilterSection(defaultSection.id);
-          setFilteredSections(defaultClass.sections);
-          await loadFeesData(defaultClass.id, defaultSection.id);
-        } else {
-          await loadFeesData(defaultClass.id, "");
-        }
+      const profileRes = await axios.get("profile/", { headers: { Authorization: `Bearer ${token}` } });
+      const userProfile = profileRes.data;
+      setProfile(userProfile);
+
+      if (userProfile.role === "student") {
+        await loadFeesData("", "", userProfile);
       } else {
-        await loadFeesData("", "");
+        const classesRes = await axios.get("students/classes/", { headers: { Authorization: `Bearer ${token}` } });
+        setClassesList(classesRes.data);
+        
+        if (classesRes.data.length > 0) {
+          const defaultClass = classesRes.data[0];
+          setFilterClass(defaultClass.id);
+          const defaultSection = defaultClass.sections.length > 0 ? defaultClass.sections[0] : null;
+          if (defaultSection) {
+            setFilterSection(defaultSection.id);
+            setFilteredSections(defaultClass.sections);
+            await loadFeesData(defaultClass.id, defaultSection.id, userProfile);
+          } else {
+            await loadFeesData(defaultClass.id, "", userProfile);
+          }
+        } else {
+          await loadFeesData("", "", userProfile);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -68,10 +80,12 @@ function Fees() {
     }
   };
 
-  const loadFeesData = async (classId = "", sectionId = "") => {
+  const loadFeesData = async (classId = "", sectionId = "", userProfile = null) => {
     setLoading(true);
     try {
       const token = localStorage.getItem("access");
+      const activeProfile = userProfile || profile;
+
       let studentsUrl = "students/all/";
       let feesUrl = "fees/all/";
       
@@ -84,20 +98,25 @@ function Fees() {
         feesUrl += queryStr;
       }
 
-      const [studentsRes, logsRes] = await Promise.all([
-        axios.get(studentsUrl, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(feesUrl, { headers: { Authorization: `Bearer ${token}` } })
-      ]);
-
-      setStudents(studentsRes.data);
-      setFeesLogs(logsRes.data);
-      setDisplayLimit(100);
-
-      if (studentsRes.data.length > 0) {
-        setForm((prev) => ({ ...prev, student: studentsRes.data[0].id }));
+      if (activeProfile && activeProfile.role === "student") {
+        const logsRes = await axios.get("fees/all/", { headers: { Authorization: `Bearer ${token}` } });
+        setFeesLogs(logsRes.data);
       } else {
-        setForm((prev) => ({ ...prev, student: "" }));
+        const [studentsRes, logsRes] = await Promise.all([
+          axios.get(studentsUrl, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(feesUrl, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+
+        setStudents(studentsRes.data);
+        setFeesLogs(logsRes.data);
+
+        if (studentsRes.data.length > 0) {
+          setForm((prev) => ({ ...prev, student: studentsRes.data[0].id }));
+        } else {
+          setForm((prev) => ({ ...prev, student: "" }));
+        }
       }
+      setDisplayLimit(100);
     } catch (err) {
       console.error(err);
       setError("Failed to load fees logs.");
@@ -164,7 +183,7 @@ function Fees() {
     const studentObj = students.find((s) => s.id === fee.student);
     setSelectedFee({
       ...fee,
-      studentDetails: studentObj,
+      studentDetails: studentObj || { admission_number: profile?.admission_number || "N/A", parent_name: profile?.parent_name || "N/A" },
     });
     setShowReceiptModal(true);
   };
@@ -180,141 +199,151 @@ function Fees() {
         <div className="page-header">
           <div className="page-title">
             <h1>💳 Financial Ledger & Fees</h1>
-            <p>Log student tuition fees, monitor pending bills, and print transaction receipts</p>
+            <p>
+              {role === "student"
+                ? "Review your tuition fees statement invoices and print transaction receipts"
+                : "Log student tuition fees, monitor pending bills, and print transaction receipts"}
+            </p>
           </div>
         </div>
 
         {error && <div className="badge badge-danger btn-block" style={{ padding: "0.75rem", borderRadius: "8px", margin: "1rem 0" }}>{error}</div>}
 
-        {/* Filters Panel */}
-        <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 2rem" }}>
-          <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: "700", color: "var(--text-secondary)" }}>🔍 Filter Directory & Ledger:</span>
-            <div style={{ display: "flex", gap: "1rem", flexGrow: 1, maxWidth: "500px" }}>
-              <select
-                className="form-select"
-                value={filterClass}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilterClass(val);
-                  setFilterSection("");
-                  const selectedCls = classesList.find(c => c.id === parseInt(val));
-                  const newSecs = selectedCls ? selectedCls.sections : [];
-                  setFilteredSections(newSecs);
-                  loadFeesData(val, "");
-                }}
-              >
-                <option value="">All Classes</option>
-                {classesList.map(cls => (
-                  <option key={cls.id} value={cls.id}>{cls.name}</option>
-                ))}
-              </select>
-
-              <select
-                className="form-select"
-                value={filterSection}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilterSection(val);
-                  loadFeesData(filterClass, val);
-                }}
-                disabled={!filterClass}
-              >
-                <option value="">All Sections</option>
-                {filteredSections.map(sec => (
-                  <option key={sec.id} value={sec.id}>Sec {sec.name}</option>
-                ))}
-              </select>
-            </div>
-            {(filterClass || filterSection) && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setFilterClass("");
-                  setFilterSection("");
-                  setFilteredSections([]);
-                  loadFeesData("", "");
-                }}
-              >
-                🧹 Clear Filters
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="dashboard-grid" style={{ gridTemplateColumns: "1fr 2fr", alignItems: "start" }}>
-          
-          {/* Add / Record Fee Transaction Form Card */}
-          <div className="content-card">
-            <h2 style={{ marginBottom: "1.5rem" }}>💳 Log Payment</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>Student</label>
+        {/* Filters Panel (Only for admin) */}
+        {role !== "student" && (
+          <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 2rem" }}>
+            <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: "700", color: "var(--text-secondary)" }}>🔍 Filter Directory & Ledger:</span>
+              <div style={{ display: "flex", gap: "1rem", flexGrow: 1, maxWidth: "500px" }}>
                 <select
                   className="form-select"
-                  value={form.student}
-                  onChange={(e) => setForm({ ...form, student: e.target.value })}
-                  required
+                  value={filterClass}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterClass(val);
+                    setFilterSection("");
+                    const selectedCls = classesList.find(c => c.id === parseInt(val));
+                    const newSecs = selectedCls ? selectedCls.sections : [];
+                    setFilteredSections(newSecs);
+                    loadFeesData(val, "", profile);
+                  }}
                 >
-                  {students.length === 0 ? (
-                    <option value="">No students available</option>
-                  ) : (
-                    students.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.user_details?.username} ({s.admission_number})
-                      </option>
-                    ))
-                  )}
+                  <option value="">All Classes</option>
+                  {classesList.map(cls => (
+                    <option key={cls.id} value={cls.id}>{cls.name}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="form-select"
+                  value={filterSection}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterSection(val);
+                    loadFeesData(filterClass, val, profile);
+                  }}
+                  disabled={!filterClass}
+                >
+                  <option value="">All Sections</option>
+                  {filteredSections.map(sec => (
+                    <option key={sec.id} value={sec.id}>Sec {sec.name}</option>
+                  ))}
                 </select>
               </div>
-
-              <div className="form-group">
-                <label>Total Tuition Bill ($)</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={form.total_amount}
-                  onChange={(e) => setForm({ ...form, total_amount: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Paid Amount ($)</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 2500"
-                  className="form-control"
-                  value={form.paid_amount}
-                  onChange={(e) => setForm({ ...form, paid_amount: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Transaction Date</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  value={form.payment_date}
-                  onChange={(e) => setForm({ ...form, payment_date: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="info-banner" style={{ fontSize: "0.85rem", marginTop: "1rem" }}>
-                💡 Status (Paid, Partial, Pending) is automatically computed based on your paid amount vs total tuition.
-              </div>
-
-              <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "1rem" }} disabled={students.length === 0}>
-                Record Payment
-              </button>
-            </form>
+              {(filterClass || filterSection) && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setFilterClass("");
+                    setFilterSection("");
+                    setFilteredSections([]);
+                    loadFeesData("", "", profile);
+                  }}
+                >
+                  🧹 Clear Filters
+                </button>
+              )}
+            </div>
           </div>
+        )}
+
+        <div className="dashboard-grid" style={{ gridTemplateColumns: role === "student" ? "1fr" : "1fr 2fr", alignItems: "start" }}>
+          
+          {/* Add / Record Fee Transaction Form Card (Only for admin) */}
+          {role !== "student" && (
+            <div className="content-card">
+              <h2 style={{ marginBottom: "1.5rem" }}>💳 Log Payment</h2>
+              <form onSubmit={handleSubmit}>
+                <div className="form-group">
+                  <label>Student</label>
+                  <select
+                    className="form-select"
+                    value={form.student}
+                    onChange={(e) => setForm({ ...form, student: e.target.value })}
+                    required
+                  >
+                    {students.length === 0 ? (
+                      <option value="">No students available</option>
+                    ) : (
+                      students.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.user_details?.username} ({s.admission_number})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Total Tuition Bill ($)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={form.total_amount}
+                    onChange={(e) => setForm({ ...form, total_amount: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Paid Amount ($)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 2500"
+                    className="form-control"
+                    value={form.paid_amount}
+                    onChange={(e) => setForm({ ...form, paid_amount: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Transaction Date</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={form.payment_date}
+                    onChange={(e) => setForm({ ...form, payment_date: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="info-banner" style={{ fontSize: "0.85rem", marginTop: "1rem" }}>
+                  💡 Status (Paid, Partial, Pending) is automatically computed based on your paid amount vs total tuition.
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "1rem" }} disabled={students.length === 0}>
+                  Record Payment
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* Fees Registry Table Card */}
           <div className="content-card">
-            <h2 style={{ marginBottom: "1.5rem" }}>📋 Tuition Fees Ledger</h2>
+            <h2 style={{ marginBottom: "1.5rem" }}>
+              {role === "student" ? "📋 My Tuition Fees Ledger" : "📋 Tuition Fees Ledger"}
+            </h2>
             {loading ? (
               <p>Loading transaction files...</p>
             ) : feesLogs.length === 0 ? (
@@ -405,7 +434,7 @@ function Fees() {
                   {selectedFee.studentDetails && (
                     <>
                       <div><strong>Admission No:</strong> {selectedFee.studentDetails.admission_number}</div>
-                      <div><strong>Parent/Guardian:</strong> {selectedFee.studentDetails.parent_name}</div>
+                      <div><strong>Parent/Guardian:</strong> {selectedFee.studentDetails.parent_name || "--"}</div>
                     </>
                   )}
                 </div>

@@ -16,10 +16,12 @@ COPY . /app/
 # Create database and static files directory paths
 RUN mkdir -p /app/db /app/static
 
-# Run django collectstatic
-RUN python manage.py collectstatic --noinput
+# Make entrypoint script executable
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8000
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Start Gunicorn server
 CMD ["gunicorn", "core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

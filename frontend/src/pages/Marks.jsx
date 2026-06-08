@@ -10,6 +10,9 @@ function Marks() {
   const [subjectsList, setSubjectsList] = useState([]);
   const [profile, setProfile] = useState(null);
 
+  // Synchronous role read
+  const role = localStorage.getItem("role") || "student";
+
   // Filter States
   const [filterClass, setFilterClass] = useState("");
   const [filterSection, setFilterSection] = useState("");
@@ -44,25 +47,74 @@ function Marks() {
     fetchInitialData();
   }, [navigate]);
 
+  // Automatic report generation for students when profile, marks, or exam filter changes
+  useEffect(() => {
+    if (role === "student" && students.length > 0 && marksLogs.length > 0 && selectedStudentId) {
+      const studentObj = students[0];
+      let studentMarks = marksLogs.filter((m) => m.student === studentObj.id);
+      if (selectedExamType !== "all") {
+        studentMarks = studentMarks.filter((m) => m.exam_type === selectedExamType);
+      }
+      
+      if (studentMarks.length > 0) {
+        let totalObtained = 0;
+        let totalPossible = 0;
+        studentMarks.forEach((m) => {
+          totalObtained += m.marks_obtained;
+          totalPossible += m.total_marks;
+        });
+
+        const averagePercentage = totalPossible > 0 ? (totalObtained / totalPossible) * 100 : 0;
+        
+        let letterGrade = "F";
+        if (averagePercentage >= 90) letterGrade = "A+";
+        else if (averagePercentage >= 80) letterGrade = "A";
+        else if (averagePercentage >= 70) letterGrade = "B";
+        else if (averagePercentage >= 60) letterGrade = "C";
+        else if (averagePercentage >= 50) letterGrade = "D";
+
+        setReportCardData({
+          student: studentObj,
+          marks: studentMarks,
+          totalObtained,
+          totalPossible,
+          percentage: averagePercentage.toFixed(1),
+          grade: letterGrade,
+          examType: selectedExamType,
+        });
+      } else {
+        setReportCardData(null);
+      }
+    }
+  }, [students, marksLogs, selectedExamType, selectedStudentId, role]);
+
   const fetchInitialData = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("access");
-      const classesRes = await axios.get("students/classes/", { headers: { Authorization: `Bearer ${token}` } });
-      setClassesList(classesRes.data);
-      if (classesRes.data.length > 0) {
-        const defaultClass = classesRes.data[0];
-        setFilterClass(defaultClass.id);
-        const defaultSection = defaultClass.sections.length > 0 ? defaultClass.sections[0] : null;
-        if (defaultSection) {
-          setFilterSection(defaultSection.id);
-          setFilteredSections(defaultClass.sections);
-          await loadData(defaultClass.id, defaultSection.id);
-        } else {
-          await loadData(defaultClass.id, "");
-        }
+      const profileRes = await axios.get("profile/", { headers: { Authorization: `Bearer ${token}` } });
+      const userProfile = profileRes.data;
+      setProfile(userProfile);
+
+      if (userProfile.role === "student") {
+        await loadData("", "", userProfile);
       } else {
-        await loadData("", "");
+        const classesRes = await axios.get("students/classes/", { headers: { Authorization: `Bearer ${token}` } });
+        setClassesList(classesRes.data);
+        if (classesRes.data.length > 0) {
+          const defaultClass = classesRes.data[0];
+          setFilterClass(defaultClass.id);
+          const defaultSection = defaultClass.sections.length > 0 ? defaultClass.sections[0] : null;
+          if (defaultSection) {
+            setFilterSection(defaultSection.id);
+            setFilteredSections(defaultClass.sections);
+            await loadData(defaultClass.id, defaultSection.id, userProfile);
+          } else {
+            await loadData(defaultClass.id, "", userProfile);
+          }
+        } else {
+          await loadData("", "", userProfile);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -71,10 +123,11 @@ function Marks() {
     }
   };
 
-  const loadData = async (classId = "", sectionId = "") => {
+  const loadData = async (classId = "", sectionId = "", userProfile = null) => {
     setLoading(true);
     try {
       const token = localStorage.getItem("access");
+      const activeProfile = userProfile || profile;
       
       let studentsUrl = "students/all/";
       let marksUrl = "marks/all/";
@@ -87,26 +140,29 @@ function Marks() {
         marksUrl += queryStr;
       }
 
-      const [profileRes, studentsRes, subjectsRes, logsRes] = await Promise.all([
-        axios.get("profile/", { headers: { Authorization: `Bearer ${token}` } }),
+      const [studentsRes, subjectsRes, logsRes] = await Promise.all([
         axios.get(studentsUrl, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get("students/subjects/", { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(marksUrl, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
-      setProfile(profileRes.data);
       setStudents(studentsRes.data);
       setSubjectsList(subjectsRes.data);
       setMarksLogs(logsRes.data);
       setDisplayLimit(100);
 
-      if (studentsRes.data.length > 0) {
-        setForm((prev) => ({ ...prev, student: studentsRes.data[0].id }));
-        setSelectedStudentId(studentsRes.data[0].id);
+      if (activeProfile && activeProfile.role === "student") {
+        setSelectedStudentId(activeProfile.student_id);
       } else {
-        setForm((prev) => ({ ...prev, student: "" }));
-        setSelectedStudentId("");
+        if (studentsRes.data.length > 0) {
+          setForm((prev) => ({ ...prev, student: studentsRes.data[0].id }));
+          setSelectedStudentId(studentsRes.data[0].id);
+        } else {
+          setForm((prev) => ({ ...prev, student: "" }));
+          setSelectedStudentId("");
+        }
       }
+
       if (subjectsRes.data.length > 0) {
         setForm((prev) => ({ ...prev, subject: subjectsRes.data[0].id }));
       }
@@ -172,7 +228,10 @@ function Marks() {
     }
 
     const studentObj = students.find((s) => s.id === parseInt(selectedStudentId));
-    if (!studentObj) return;
+    if (!studentObj) {
+      alert("Student profile details not loaded yet.");
+      return;
+    }
 
     // Filter marks for this student
     let studentMarks = marksLogs.filter((m) => m.student === parseInt(selectedStudentId));
@@ -227,248 +286,352 @@ function Marks() {
         <div className="page-header">
           <div className="page-title">
             <h1>📝 Student Grades & Reports</h1>
-            <p>Enter grades, inspect exam performance, and generate official report cards</p>
+            <p>
+              {role === "student" 
+                ? "View your academic progress progress report and print your report card"
+                : "Enter grades, inspect exam performance, and generate official report cards"}
+            </p>
           </div>
         </div>
 
         {error && <div className="badge badge-danger btn-block" style={{ padding: "0.75rem", borderRadius: "8px", margin: "1rem 0" }}>{error}</div>}
 
-        {/* Filters Panel */}
-        <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 2rem" }}>
-          <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: "700", color: "var(--text-secondary)" }}>🔍 Filter Directory & Logs:</span>
-            <div style={{ display: "flex", gap: "1rem", flexGrow: 1, maxWidth: "500px" }}>
-              <select
-                className="form-select"
-                value={filterClass}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilterClass(val);
-                  setFilterSection("");
-                  const selectedCls = classesList.find(c => c.id === parseInt(val));
-                  const newSecs = selectedCls ? selectedCls.sections : [];
-                  setFilteredSections(newSecs);
-                  loadData(val, "");
-                }}
-              >
-                <option value="">All Classes</option>
-                {classesList.map(cls => (
-                  <option key={cls.id} value={cls.id}>{cls.name}</option>
-                ))}
-              </select>
-
-              <select
-                className="form-select"
-                value={filterSection}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilterSection(val);
-                  loadData(filterClass, val);
-                }}
-                disabled={!filterClass}
-              >
-                <option value="">All Sections</option>
-                {filteredSections.map(sec => (
-                  <option key={sec.id} value={sec.id}>Sec {sec.name}</option>
-                ))}
-              </select>
-            </div>
-            {(filterClass || filterSection) && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setFilterClass("");
-                  setFilterSection("");
-                  setFilteredSections([]);
-                  loadData("", "");
-                }}
-              >
-                🧹 Clear Filters
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="dashboard-grid" style={{ gridTemplateColumns: "1fr 2fr", alignItems: "start" }}>
-          
-          {/* Add Marks Card */}
-          <div className="content-card">
-            <h2 style={{ marginBottom: "1.5rem" }}>📝 Record Exam Marks</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>Student</label>
+        {/* Filters Panel (Only visible to admin/teacher) */}
+        {role !== "student" && (
+          <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 2rem" }}>
+            <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: "700", color: "var(--text-secondary)" }}>🔍 Filter Directory & Logs:</span>
+              <div style={{ display: "flex", gap: "1rem", flexGrow: 1, maxWidth: "500px" }}>
                 <select
                   className="form-select"
-                  value={form.student}
-                  onChange={(e) => setForm({ ...form, student: e.target.value })}
-                  required
+                  value={filterClass}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterClass(val);
+                    setFilterSection("");
+                    const selectedCls = classesList.find(c => c.id === parseInt(val));
+                    const newSecs = selectedCls ? selectedCls.sections : [];
+                    setFilteredSections(newSecs);
+                    loadData(val, "", profile);
+                  }}
                 >
-                  {students.length === 0 ? (
-                    <option value="">No students available</option>
-                  ) : (
-                    students.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.user_details?.username} ({s.admission_number})
-                      </option>
-                    ))
-                  )}
+                  <option value="">All Classes</option>
+                  {classesList.map(cls => (
+                    <option key={cls.id} value={cls.id}>{cls.name}</option>
+                  ))}
                 </select>
-              </div>
 
-              <div className="form-group">
-                <label>Subject</label>
                 <select
                   className="form-select"
-                  value={form.subject}
-                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                  required
+                  value={filterSection}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterSection(val);
+                    loadData(filterClass, val, profile);
+                  }}
+                  disabled={!filterClass}
                 >
-                  <option value="" disabled>-- Choose Subject --</option>
-                  {subjectsList.map((sub) => (
-                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  <option value="">All Sections</option>
+                  {filteredSections.map(sec => (
+                    <option key={sec.id} value={sec.id}>Sec {sec.name}</option>
                   ))}
                 </select>
               </div>
+              {(filterClass || filterSection) && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setFilterClass("");
+                    setFilterSection("");
+                    setFilteredSections([]);
+                    loadData("", "", profile);
+                  }}
+                >
+                  🧹 Clear Filters
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
-              <div className="form-group">
-                <label>Exam Type</label>
+        {/* Student-specific layout: Inline Report Card view */}
+        {role === "student" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            {/* Exam Type Selector banner */}
+            <div className="content-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+              <h2>🎓 My Academic Progress</h2>
+              <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ fontWeight: "600", color: "var(--text-secondary)" }}>Report Period:</label>
                 <select
                   className="form-select"
-                  value={form.exam_type}
-                  onChange={(e) => setForm({ ...form, exam_type: e.target.value })}
-                  required
+                  value={selectedExamType}
+                  onChange={(e) => setSelectedExamType(e.target.value)}
+                  style={{ width: "180px" }}
                 >
+                  <option value="all">All Exams</option>
                   <option value="midterm">Midterm</option>
                   <option value="final">Final</option>
                   <option value="unit_test">Unit Test</option>
                 </select>
+                <button className="btn btn-success" onClick={handlePrint} disabled={!reportCardData}>
+                  🖨️ Print Report Card
+                </button>
               </div>
+            </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Marks Obtained</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 85"
-                    className="form-control"
-                    value={form.marks_obtained}
-                    onChange={(e) => setForm({ ...form, marks_obtained: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Total Marks</label>
-                  <input
-                    type="number"
-                    placeholder="100"
-                    className="form-control"
-                    value={form.total_marks}
-                    onChange={(e) => setForm({ ...form, total_marks: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "1rem" }} disabled={students.length === 0 || subjectsList.length === 0}>
-                Record Score
-              </button>
-            </form>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            
-            {/* Report Card Generator Settings Card */}
+            {/* Compiled Report Card Board */}
             <div className="content-card">
-              <h2 style={{ marginBottom: "1.25rem" }}>🎓 Report Card Generator</h2>
-              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div className="form-group" style={{ flex: "1", minWidth: "200px", marginBottom: "0" }}>
-                  <label>Select Student</label>
+              {reportCardData ? (
+                <div className="report-card-print" style={{ border: "2px solid var(--border-color)", borderRadius: "12px", padding: "2.5rem" }}>
+                  <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+                    <h1 style={{ margin: "0", fontSize: "1.75rem", color: "var(--text-primary)" }}>ACADEMIX PRO ACADEMY</h1>
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", textTransform: "uppercase" }}>Official Student Progress Report</p>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "2.5rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "1.5rem" }}>
+                    <div>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginBottom: "0.5rem" }}><strong>Student Name:</strong> {reportCardData.student.user_details?.username}</p>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginBottom: "0.5rem" }}><strong>Admission Number:</strong> {reportCardData.student.admission_number}</p>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginBottom: "0.5rem" }}><strong>Gender:</strong> {reportCardData.student.gender}</p>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
+                        <strong>Class:</strong> {reportCardData.student.class_name ? `${reportCardData.student.class_name} - ${reportCardData.student.section_name}` : "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginBottom: "0.5rem" }}><strong>Parent/Guardian:</strong> {reportCardData.student.parent_name}</p>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginBottom: "0.5rem" }}><strong>Date of Birth:</strong> {reportCardData.student.date_of_birth}</p>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}><strong>Report Period:</strong> {reportCardData.examType.toUpperCase()}</p>
+                    </div>
+                  </div>
+
+                  <table className="table" style={{ width: "100%", marginBottom: "2.5rem" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ background: "var(--bg-main)" }}>Subject Name</th>
+                        <th style={{ background: "var(--bg-main)" }}>Exam Type</th>
+                        <th style={{ background: "var(--bg-main)" }}>Marks Obtained</th>
+                        <th style={{ background: "var(--bg-main)" }}>Total Marks</th>
+                        <th style={{ background: "var(--bg-main)" }}>Percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportCardData.marks.map((m) => (
+                        <tr key={m.id}>
+                          <td style={{ fontWeight: "600" }}>{m.subject_name || `ID: ${m.subject}`}</td>
+                          <td style={{ textTransform: "capitalize" }}>{m.exam_type}</td>
+                          <td>{m.marks_obtained}</td>
+                          <td>{m.total_marks}</td>
+                          <td>{((m.marks_obtained / m.total_marks) * 100).toFixed(0)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", background: "var(--bg-main)", border: "1px solid var(--border-color)", padding: "1.25rem", borderRadius: "8px", textAlign: "center" }}>
+                    <div>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>AGGREGATE SCORES</p>
+                      <h3 style={{ color: "var(--text-primary)", fontSize: "1.5rem", marginTop: "0.25rem" }}>{reportCardData.totalObtained} / {reportCardData.totalPossible}</h3>
+                    </div>
+                    <div>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>PERCENTAGE</p>
+                      <h3 style={{ color: "var(--text-primary)", fontSize: "1.5rem", marginTop: "0.25rem" }}>{reportCardData.percentage}%</h3>
+                    </div>
+                    <div>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>FINAL GRADE</p>
+                      <h3 style={{ color: "var(--accent)", fontSize: "1.5rem", marginTop: "0.25rem" }}>{reportCardData.grade}</h3>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ color: "var(--text-secondary)", textAlign: "center" }}>No exam grades logged for this period yet.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Teacher/Admin layout: Grid with Record and List features */}
+        {role !== "student" && (
+          <div className="dashboard-grid" style={{ gridTemplateColumns: "1fr 2fr", alignItems: "start" }}>
+            
+            {/* Add Marks Card */}
+            <div className="content-card">
+              <h2 style={{ marginBottom: "1.5rem" }}>📝 Record Exam Marks</h2>
+              <form onSubmit={handleSubmit}>
+                <div className="form-group">
+                  <label>Student</label>
                   <select
                     className="form-select"
-                    value={selectedStudentId}
-                    onChange={(e) => setSelectedStudentId(e.target.value)}
+                    value={form.student}
+                    onChange={(e) => setForm({ ...form, student: e.target.value })}
+                    required
                   >
-                    {students.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.user_details?.username}
-                      </option>
+                    {students.length === 0 ? (
+                      <option value="">No students available</option>
+                    ) : (
+                      students.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.user_details?.username} ({s.admission_number})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Subject</label>
+                  <select
+                    className="form-select"
+                    value={form.subject}
+                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                    required
+                  >
+                    <option value="" disabled>-- Choose Subject --</option>
+                    {subjectsList.map((sub) => (
+                      <option key={sub.id} value={sub.id}>{sub.name}</option>
                     ))}
                   </select>
                 </div>
 
-                <div className="form-group" style={{ flex: "1", minWidth: "150px", marginBottom: "0" }}>
-                  <label>Exam Type Filter</label>
+                <div className="form-group">
+                  <label>Exam Type</label>
                   <select
                     className="form-select"
-                    value={selectedExamType}
-                    onChange={(e) => setSelectedExamType(e.target.value)}
+                    value={form.exam_type}
+                    onChange={(e) => setForm({ ...form, exam_type: e.target.value })}
+                    required
                   >
-                    <option value="all">All Exams</option>
                     <option value="midterm">Midterm</option>
                     <option value="final">Final</option>
                     <option value="unit_test">Unit Test</option>
                   </select>
                 </div>
 
-                <button className="btn btn-success" onClick={handleGenerateReportCard} disabled={students.length === 0}>
-                  ✨ Generate Report Card
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Marks Obtained</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 85"
+                      className="form-control"
+                      value={form.marks_obtained}
+                      onChange={(e) => setForm({ ...form, marks_obtained: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Total Marks</label>
+                    <input
+                      type="number"
+                      placeholder="100"
+                      className="form-control"
+                      value={form.total_marks}
+                      onChange={(e) => setForm({ ...form, total_marks: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "1rem" }} disabled={students.length === 0 || subjectsList.length === 0}>
+                  Record Score
                 </button>
+              </form>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+              
+              {/* Report Card Generator Settings Card */}
+              <div className="content-card">
+                <h2 style={{ marginBottom: "1.25rem" }}>🎓 Report Card Generator</h2>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div className="form-group" style={{ flex: "1", minWidth: "200px", marginBottom: "0" }}>
+                    <label>Select Student</label>
+                    <select
+                      className="form-select"
+                      value={selectedStudentId}
+                      onChange={(e) => setSelectedStudentId(e.target.value)}
+                    >
+                      {students.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.user_details?.username}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ flex: "1", minWidth: "150px", marginBottom: "0" }}>
+                    <label>Exam Type Filter</label>
+                    <select
+                      className="form-select"
+                      value={selectedExamType}
+                      onChange={(e) => setSelectedExamType(e.target.value)}
+                    >
+                      <option value="all">All Exams</option>
+                      <option value="midterm">Midterm</option>
+                      <option value="final">Final</option>
+                      <option value="unit_test">Unit Test</option>
+                    </select>
+                  </div>
+
+                  <button className="btn btn-success" onClick={handleGenerateReportCard} disabled={students.length === 0 && !selectedStudentId}>
+                    ✨ Generate Report Card
+                  </button>
+                </div>
+              </div>
+
+              {/* Grades Logs History Card */}
+              <div className="content-card">
+                <h2 style={{ marginBottom: "1.5rem" }}>📋 Grades Registry Logs</h2>
+                {loading ? (
+                  <p>Loading registry log data...</p>
+                ) : marksLogs.length === 0 ? (
+                  <p style={{ color: "var(--text-secondary)" }}>No grades registered in the system yet.</p>
+                ) : (
+                  <div className="table-container">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Student</th>
+                          <th>Subject</th>
+                          <th>Exam Type</th>
+                          <th>Score</th>
+                          <th>Graded By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {marksLogs.slice(0, displayLimit).map((log) => (
+                          <tr key={log.id}>
+                            <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>{log.student_name}</td>
+                            <td style={{ fontWeight: "500" }}>{log.subject_name || `ID: ${log.subject}`}</td>
+                            <td>
+                              <span className="badge badge-info" style={{ textTransform: "capitalize" }}>
+                                {log.exam_type}
+                              </span>
+                            </td>
+                            <td>
+                              <strong>{log.marks_obtained}</strong> / {log.total_marks} (
+                              {((log.marks_obtained / log.total_marks) * 100).toFixed(0)}%)
+                            </td>
+                            <td>{log.graded_by_name}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {marksLogs.length > displayLimit && (
+                      <div style={{ textAlign: "center", marginTop: "1rem", borderTop: "1px solid var(--border-color)", paddingTop: "1rem" }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setDisplayLimit(prev => prev + 100)}>
+                          Load More Logs (Showing {displayLimit} of {marksLogs.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Grades Logs History Card */}
-            <div className="content-card">
-              <h2 style={{ marginBottom: "1.5rem" }}>📋 Grades Registry Logs</h2>
-              {loading ? (
-                <p>Loading registry log data...</p>
-              ) : marksLogs.length === 0 ? (
-                <p style={{ color: "var(--text-secondary)" }}>No grades registered in the system yet.</p>
-              ) : (
-                <div className="table-container">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Student</th>
-                        <th>Subject</th>
-                        <th>Exam Type</th>
-                        <th>Score</th>
-                        <th>Graded By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {marksLogs.slice(0, displayLimit).map((log) => (
-                        <tr key={log.id}>
-                          <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>{log.student_name}</td>
-                          <td style={{ fontWeight: "500" }}>{log.subject_name || `ID: ${log.subject}`}</td>
-                          <td>
-                            <span className="badge badge-info" style={{ textTransform: "capitalize" }}>
-                              {log.exam_type}
-                            </span>
-                          </td>
-                          <td>
-                            <strong>{log.marks_obtained}</strong> / {log.total_marks} (
-                            {((log.marks_obtained / log.total_marks) * 100).toFixed(0)}%)
-                          </td>
-                          <td>{log.graded_by_name}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {marksLogs.length > displayLimit && (
-                    <div style={{ textAlign: "center", marginTop: "1rem", borderTop: "1px solid var(--border-color)", paddingTop: "1rem" }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setDisplayLimit(prev => prev + 100)}>
-                        Load More Logs (Showing {displayLimit} of {marksLogs.length})
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
-        </div>
+        )}
       </main>
 
-      {/* Report Card Modal */}
+      {/* Report Card Modal (Only visible for teacher/admin view popup) */}
       {showReportCardModal && reportCardData && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: "700px" }}>

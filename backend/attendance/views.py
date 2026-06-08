@@ -14,6 +14,11 @@ from .serializers import AttendanceSerializer
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_attendance(request):
+    if request.user.role != 'teacher':
+        return Response(
+            {"error": "Permission denied. Only teachers can mark attendance."},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     serializer = AttendanceSerializer(data=request.data)
 
@@ -40,12 +45,20 @@ def get_attendance(request):
 
     attendance = Attendance.objects.select_related('student__user', 'marked_by').all()
 
-    if student_id:
-        attendance = attendance.filter(student_id=student_id)
-    if school_class_id:
-        attendance = attendance.filter(student__school_class_id=school_class_id)
-    if section_id:
-        attendance = attendance.filter(student__section_id=section_id)
+    # Role-based restriction
+    if request.user.role == 'student':
+        if hasattr(request.user, 'student_profile'):
+            attendance = attendance.filter(student=request.user.student_profile)
+        else:
+            return Response([])
+    else:
+        # Admins and teachers can filter as usual
+        if student_id:
+            attendance = attendance.filter(student_id=student_id)
+        if school_class_id:
+            attendance = attendance.filter(student__school_class_id=school_class_id)
+        if section_id:
+            attendance = attendance.filter(student__section_id=section_id)
 
     serializer = AttendanceSerializer(
         attendance,
@@ -58,6 +71,13 @@ def get_attendance(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def student_attendance(request, student_id):
+    # Role-based restriction
+    if request.user.role == 'student':
+        if not hasattr(request.user, 'student_profile') or request.user.student_profile.id != student_id:
+            return Response(
+                {"error": "Permission denied. You can only view your own attendance."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     attendance = Attendance.objects.select_related('student__user', 'marked_by').filter(
         student_id=student_id

@@ -110,12 +110,26 @@ def set_password(request):
 def profile(request):
 
     user = request.user
-
-    return Response({
+    data = {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "phone": user.phone,
         "role": user.role,
-    })
+    }
+
+    if user.role == 'student' and hasattr(user, 'student_profile'):
+        student = user.student_profile
+        data['student_id'] = student.id
+        data['school_class'] = student.school_class_id
+        data['section'] = student.section_id
+        data['class_name'] = student.school_class.name if student.school_class else None
+        data['section_name'] = student.section.name if student.section else None
+        data['admission_number'] = student.admission_number
+    elif user.role == 'teacher' and hasattr(user, 'teacher_profile'):
+        teacher = user.teacher_profile
+        data['teacher_id'] = teacher.id
+        data['employee_id'] = teacher.employee_id
+
+    return Response(data)
     

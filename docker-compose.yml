@@ -6,8 +6,8 @@ services:
     volumes:
       - backend_db:/app/db
       - static_volume:/app/static
-    environment:
-      - DEBUG=False
+    env_file:
+      - ./backend/.env
     expose:
       - "8000"
     restart: always

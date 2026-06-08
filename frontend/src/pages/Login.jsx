@@ -24,7 +24,16 @@ function Login() {
         password,
       });
 
-      localStorage.setItem("access", response.data.access);
+      const token = response.data.access;
+      localStorage.setItem("access", token);
+
+      // Fetch user profile info immediately
+      const profileResponse = await axios.get("profile/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      localStorage.setItem("role", profileResponse.data.role);
+      localStorage.setItem("user_profile", JSON.stringify(profileResponse.data));
+
       navigate("/dashboard");
     } catch (error) {
       console.log(error);

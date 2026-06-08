@@ -86,10 +86,33 @@ def get_students(request):
     section_id = request.query_params.get('section')
     
     students = Student.objects.all()
-    if school_class_id:
-        students = students.filter(school_class_id=school_class_id)
-    if section_id:
-        students = students.filter(section_id=section_id)
+    
+    # Role-based restriction
+    if request.user.role == 'student':
+        if hasattr(request.user, 'student_profile'):
+            students = students.filter(id=request.user.student_profile.id)
+        else:
+            return Response([])
+    elif request.user.role == 'teacher':
+        if hasattr(request.user, 'teacher_profile'):
+            teacher = request.user.teacher_profile
+            students = students.filter(
+                school_class__in=teacher.classes.all(),
+                section__in=teacher.sections.all()
+            )
+        else:
+            return Response([])
+            
+        if school_class_id:
+            students = students.filter(school_class_id=school_class_id)
+        if section_id:
+            students = students.filter(section_id=section_id)
+    else:
+        # Admins
+        if school_class_id:
+            students = students.filter(school_class_id=school_class_id)
+        if section_id:
+            students = students.filter(section_id=section_id)
         
     serializer = StudentSerializer(students, many=True)
     return Response(serializer.data)
@@ -98,6 +121,34 @@ def get_students(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_student(request, id):
+    # Role-based restriction
+    if request.user.role == 'student':
+        if not hasattr(request.user, 'student_profile') or request.user.student_profile.id != id:
+            return Response(
+                {"error": "Permission denied. You can only view your own student details."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+    elif request.user.role == 'teacher':
+        if hasattr(request.user, 'teacher_profile'):
+            teacher = request.user.teacher_profile
+            try:
+                student = Student.objects.get(id=id)
+                if student.school_class not in teacher.classes.all() or student.section not in teacher.sections.all():
+                    return Response(
+                        {"error": "Permission denied. You can only view details of students in your assigned classes and sections."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Student.DoesNotExist:
+                return Response(
+                    {"error": "Student not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            return Response(
+                {"error": "Permission denied. Teacher profile not found."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
     try:
         student = Student.objects.get(id=id)
         serializer = StudentSerializer(student)

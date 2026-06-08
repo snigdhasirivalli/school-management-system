@@ -15,6 +15,9 @@ function Attendance() {
   const [profile, setProfile] = useState(null);
   const [displayLimit, setDisplayLimit] = useState(100);
   
+  // Synchronous role read
+  const role = localStorage.getItem("role") || "student";
+
   // Form State
   const [form, setForm] = useState({
     student: "",
@@ -40,24 +43,31 @@ function Attendance() {
       const token = localStorage.getItem("access");
       const [profileRes, classesRes] = await Promise.all([
         axios.get("profile/", { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get("students/classes/", { headers: { Authorization: `Bearer ${token}` } })
+        role !== "student" 
+          ? axios.get("students/classes/", { headers: { Authorization: `Bearer ${token}` } })
+          : Promise.resolve({ data: [] })
       ]);
       setProfile(profileRes.data);
-      setClassesList(classesRes.data);
       
-      if (classesRes.data.length > 0) {
-        const defaultClass = classesRes.data[0];
-        setSelectedClass(defaultClass.id);
-        const defaultSection = defaultClass.sections.length > 0 ? defaultClass.sections[0] : null;
-        if (defaultSection) {
-          setSelectedSection(defaultSection.id);
-          setSectionsList(defaultClass.sections);
-          await loadAttendanceData(defaultClass.id, defaultSection.id);
-        } else {
-          await loadAttendanceData(defaultClass.id, "");
-        }
+      const activeProfile = profileRes.data;
+      if (activeProfile.role === "student") {
+        await loadAttendanceData("", "", activeProfile);
       } else {
-        await loadAttendanceData("", "");
+        setClassesList(classesRes.data);
+        if (classesRes.data.length > 0) {
+          const defaultClass = classesRes.data[0];
+          setSelectedClass(defaultClass.id);
+          const defaultSection = defaultClass.sections.length > 0 ? defaultClass.sections[0] : null;
+          if (defaultSection) {
+            setSelectedSection(defaultSection.id);
+            setSectionsList(defaultClass.sections);
+            await loadAttendanceData(defaultClass.id, defaultSection.id, activeProfile);
+          } else {
+            await loadAttendanceData(defaultClass.id, "", activeProfile);
+          }
+        } else {
+          await loadAttendanceData("", "", activeProfile);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -66,10 +76,12 @@ function Attendance() {
     }
   };
 
-  const loadAttendanceData = async (classId = "", sectionId = "") => {
+  const loadAttendanceData = async (classId = "", sectionId = "", userProfile = null) => {
     setLoading(true);
     try {
       const token = localStorage.getItem("access");
+      const activeProfile = userProfile || profile;
+
       let studentsUrl = "students/all/";
       let attendanceUrl = "attendance/all/";
       
@@ -82,21 +94,27 @@ function Attendance() {
         attendanceUrl += queryStr;
       }
 
-      const [studentsRes, logsRes] = await Promise.all([
-        axios.get(studentsUrl, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(attendanceUrl, { headers: { Authorization: `Bearer ${token}` } })
-      ]);
-
-      setStudents(studentsRes.data);
-      setFilteredStudents(studentsRes.data);
-      setAttendanceLogs(logsRes.data);
-      setDisplayLimit(100);
-
-      if (studentsRes.data.length > 0) {
-        setForm((prev) => ({ ...prev, student: studentsRes.data[0].id }));
+      if (activeProfile && activeProfile.role === "student") {
+        // Students don't fetch all students directory
+        const logsRes = await axios.get("attendance/all/", { headers: { Authorization: `Bearer ${token}` } });
+        setAttendanceLogs(logsRes.data);
       } else {
-        setForm((prev) => ({ ...prev, student: "" }));
+        const [studentsRes, logsRes] = await Promise.all([
+          axios.get(studentsUrl, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(attendanceUrl, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+
+        setStudents(studentsRes.data);
+        setFilteredStudents(studentsRes.data);
+        setAttendanceLogs(logsRes.data);
+
+        if (studentsRes.data.length > 0) {
+          setForm((prev) => ({ ...prev, student: studentsRes.data[0].id }));
+        } else {
+          setForm((prev) => ({ ...prev, student: "" }));
+        }
       }
+      setDisplayLimit(100);
     } catch (err) {
       console.error(err);
       setError("Failed to load attendance logs.");
@@ -112,12 +130,12 @@ function Attendance() {
     const parsedClassId = parseInt(classId);
     const cls = classesList.find(c => c.id === parsedClassId);
     setSectionsList(cls ? cls.sections : []);
-    loadAttendanceData(classId, "");
+    loadAttendanceData(classId, "", profile);
   };
 
   const handleSectionFilterChange = (sectionId) => {
     setSelectedSection(sectionId);
-    loadAttendanceData(selectedClass, sectionId);
+    loadAttendanceData(selectedClass, sectionId, profile);
   };
 
   const handleSubmit = async (e) => {
@@ -167,107 +185,150 @@ function Attendance() {
         <div className="page-header">
           <div className="page-title">
             <h1>📅 Student Attendance</h1>
-            <p>Mark daily attendance and inspect attendance history log</p>
+            <p>
+              {role === "student"
+                ? "Review your attendance record history log"
+                : role === "admin"
+                ? "View and inspect attendance history log report summaries"
+                : "Mark daily attendance and inspect attendance history log"}
+            </p>
           </div>
         </div>
 
         {error && <div className="badge badge-danger btn-block" style={{ padding: "0.75rem", borderRadius: "8px", margin: "1rem 0" }}>{error}</div>}
 
-        <div className="dashboard-grid" style={{ gridTemplateColumns: "1fr 2fr", alignItems: "start" }}>
-          
-          {/* Mark Attendance Form Card */}
-          <div className="content-card">
-            <h2 style={{ marginBottom: "1.5rem" }}>📅 Mark Attendance</h2>
-            <form onSubmit={handleSubmit}>
-              
-              {/* Class Filter */}
-              <div className="form-group">
-                <label>Filter by Class</label>
+        {/* Filters Panel (Only visible to admin since teachers filter inside their marking panel) */}
+        {role === "admin" && (
+          <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 2rem" }}>
+            <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: "700", color: "var(--text-secondary)" }}>🔍 Filter Attendance Registry:</span>
+              <div style={{ display: "flex", gap: "1rem", flexGrow: 1, maxWidth: "500px" }}>
                 <select
                   className="form-select"
                   value={selectedClass}
                   onChange={(e) => handleClassFilterChange(e.target.value)}
                 >
-                  <option value="">-- All Classes --</option>
+                  <option value="">All Classes</option>
                   {classesList.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
-              </div>
 
-              {/* Section Filter */}
-              <div className="form-group" style={{ marginTop: "0.5rem" }}>
-                <label>Filter by Section</label>
                 <select
                   className="form-select"
                   value={selectedSection}
                   onChange={(e) => handleSectionFilterChange(e.target.value)}
                   disabled={!selectedClass}
                 >
-                  <option value="">-- All Sections --</option>
+                  <option value="">All Sections</option>
                   {sectionsList.map(s => (
                     <option key={s.id} value={s.id}>Sec {s.name}</option>
                   ))}
                 </select>
               </div>
-
-              <div style={{ borderTop: "1px solid var(--border-color)", margin: "1rem 0" }}></div>
-
-              <div className="form-group">
-                <label>Select Student</label>
-                <select
-                  className="form-select"
-                  value={form.student}
-                  onChange={(e) => setForm({ ...form, student: e.target.value })}
-                  required
-                >
-                  <option value="" disabled>-- Choose Student --</option>
-                  {filteredStudents.length === 0 ? (
-                    <option value="" disabled>No students found for filter</option>
-                  ) : (
-                    filteredStudents.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.user_details?.username} ({s.admission_number})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Date</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Status</label>
-                <select
-                  className="form-select"
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  required
-                >
-                  <option value="present">Present</option>
-                  <option value="absent">Absent</option>
-                  <option value="late">Late</option>
-                </select>
-              </div>
-
-              <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "1.5rem" }} disabled={filteredStudents.length === 0}>
-                Mark Status
-              </button>
-            </form>
+            </div>
           </div>
+        )}
+
+        <div className="dashboard-grid" style={{ gridTemplateColumns: role === "teacher" ? "1fr 2fr" : "1fr", alignItems: "start" }}>
+          
+          {/* Mark Attendance Form Card (Only for teacher) */}
+          {role === "teacher" && (
+            <div className="content-card">
+              <h2 style={{ marginBottom: "1.5rem" }}>📅 Mark Attendance</h2>
+              <form onSubmit={handleSubmit}>
+                
+                {/* Class Filter */}
+                <div className="form-group">
+                  <label>Filter by Class</label>
+                  <select
+                    className="form-select"
+                    value={selectedClass}
+                    onChange={(e) => handleClassFilterChange(e.target.value)}
+                  >
+                    <option value="">-- All Classes --</option>
+                    {classesList.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Section Filter */}
+                <div className="form-group" style={{ marginTop: "0.5rem" }}>
+                  <label>Filter by Section</label>
+                  <select
+                    className="form-select"
+                    value={selectedSection}
+                    onChange={(e) => handleSectionFilterChange(e.target.value)}
+                    disabled={!selectedClass}
+                  >
+                    <option value="">-- All Sections --</option>
+                    {sectionsList.map(s => (
+                      <option key={s.id} value={s.id}>Sec {s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--border-color)", margin: "1rem 0" }}></div>
+
+                <div className="form-group">
+                  <label>Select Student</label>
+                  <select
+                    className="form-select"
+                    value={form.student}
+                    onChange={(e) => setForm({ ...form, student: e.target.value })}
+                    required
+                  >
+                    <option value="" disabled>-- Choose Student --</option>
+                    {filteredStudents.length === 0 ? (
+                      <option value="" disabled>No students found for filter</option>
+                    ) : (
+                      filteredStudents.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.user_details?.username} ({s.admission_number})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Date</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Status</label>
+                  <select
+                    className="form-select"
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    required
+                  >
+                    <option value="present">Present</option>
+                    <option value="absent">Absent</option>
+                    <option value="late">Late</option>
+                  </select>
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "1.5rem" }} disabled={filteredStudents.length === 0}>
+                  Mark Status
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* Attendance History Card */}
           <div className="content-card">
-            <h2 style={{ marginBottom: "1.5rem" }}>📋 Daily Attendance History</h2>
+            <h2 style={{ marginBottom: "1.5rem" }}>
+              {role === "student" ? "📋 My Attendance History" : "📋 Daily Attendance History"}
+            </h2>
             {loading ? (
               <p>Loading registry logs...</p>
             ) : attendanceLogs.length === 0 ? (
