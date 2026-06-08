@@ -377,7 +377,7 @@ def manage_subject_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def manage_teachers(request):
     if request.method == 'GET':
-        teachers = Teacher.objects.all().order_by('user__username')
+        teachers = Teacher.objects.select_related('user').prefetch_related('subjects', 'classes', 'sections').all().order_by('user__username')
         serializer = TeacherSerializer(teachers, many=True)
         return Response(serializer.data)
         
