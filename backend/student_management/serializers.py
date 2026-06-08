@@ -44,9 +44,15 @@ class TeacherSerializer(serializers.ModelSerializer):
 
 class StudentSerializer(serializers.ModelSerializer):
     user_details = UserSerializer(source='user', read_only=True)
-    class_name = serializers.CharField(source='school_class.name', read_only=True)
-    section_name = serializers.CharField(source='section.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
+    section_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = '__all__'
+
+    def get_class_name(self, obj):
+        return obj.school_class.name if obj.school_class else None
+
+    def get_section_name(self, obj):
+        return obj.section.name if obj.section else None
