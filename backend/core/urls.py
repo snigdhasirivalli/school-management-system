@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.urls import path, include
-from accounts.views import debug_view
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -10,8 +9,6 @@ from rest_framework_simplejwt.views import (
 urlpatterns = [
 
     path('admin/', admin.site.urls),
-
-    path('api/debug/', debug_view),
 
     path('api/', include('accounts.urls')),
 
