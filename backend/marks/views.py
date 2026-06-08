@@ -5,6 +5,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import permission_classes
 
+from accounts.utils import log_action
+
 from .models import Mark
 from .serializers import MarkSerializer
 
@@ -22,7 +24,16 @@ def add_mark(request):
 
     if serializer.is_valid():
 
-        serializer.save()
+        mark = serializer.save()
+        try:
+            log_action(
+                user=request.user,
+                action="ADD_MARK",
+                details=f"Added {mark.exam_type} mark for {mark.student.user.email if mark.student.user else mark.student.admission_number} in {mark.subject.name}: {mark.marks_obtained}/{mark.total_marks}",
+                request=request
+            )
+        except Exception:
+            pass
 
         return Response({
             "message": "Marks added successfully"

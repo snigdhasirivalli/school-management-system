@@ -7,6 +7,8 @@ from rest_framework.decorators import permission_classes
 
 from accounts.permissions import IsAdmin, IsTeacher
 
+from accounts.utils import log_action
+
 from .models import Attendance
 from .serializers import AttendanceSerializer
 
@@ -24,7 +26,16 @@ def mark_attendance(request):
 
     if serializer.is_valid():
 
-        serializer.save()
+        attendance = serializer.save()
+        try:
+            log_action(
+                user=request.user,
+                action="MARK_ATTENDANCE",
+                details=f"Marked {attendance.student.user.email if attendance.student.user else attendance.student.admission_number} as {attendance.status} for {attendance.date}",
+                request=request
+            )
+        except Exception:
+            pass
 
         return Response({
             "message": "Attendance marked successfully"

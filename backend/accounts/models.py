@@ -38,3 +38,15 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+
+class AuditLog(models.Model):
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    action = models.CharField(max_length=255)
+    details = models.TextField(blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    def __str__(self):
+        actor_email = self.actor.email if self.actor else "System"
+        return f"{actor_email} - {self.action} - {self.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"

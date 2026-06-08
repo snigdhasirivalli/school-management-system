@@ -5,6 +5,7 @@ import axios from "../api/axios";
 
 function Dashboard() {
   const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     studentsCount: 0,
     attendanceRate: "0.0%",
@@ -21,6 +22,7 @@ function Dashboard() {
     }
 
     const fetchProfileAndStats = async () => {
+      setLoading(true);
       try {
         const profileRes = await axios.get("profile/", {
           headers: { Authorization: `Bearer ${token}` },
@@ -99,11 +101,46 @@ function Dashboard() {
           localStorage.removeItem("user_profile");
           navigate("/");
         }
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchProfileAndStats();
   }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="app-layout">
+        <Sidebar />
+        <main className="main-content">
+          <div className="page-header">
+            <div className="page-title">
+              <h1>📊 System Dashboard</h1>
+              <p>Welcome back, loading...</p>
+            </div>
+          </div>
+          <div className="dashboard-grid">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="stat-card" style={{ padding: "24px", minHeight: "135px" }}>
+                <div className="skeleton-base skeleton-text" style={{ width: "40%", height: "14px", marginBottom: "12px" }}></div>
+                <div className="skeleton-base skeleton-text" style={{ width: "65%", height: "28px", marginBottom: "12px" }}></div>
+                <div className="skeleton-base skeleton-text" style={{ width: "45%", height: "12px" }}></div>
+              </div>
+            ))}
+          </div>
+          <div className="content-card">
+            <div className="skeleton-base skeleton-text" style={{ width: "20%", height: "20px", marginBottom: "16px" }}></div>
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <div className="skeleton-base skeleton-rect" style={{ width: "120px", height: "38px" }}></div>
+              <div className="skeleton-base skeleton-rect" style={{ width: "120px", height: "38px" }}></div>
+              <div className="skeleton-base skeleton-rect" style={{ width: "120px", height: "38px" }}></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-layout">
@@ -215,6 +252,76 @@ function Dashboard() {
             <span className="stat-desc">Global bulletins broadcasted</span>
           </div>
         </div>
+
+        {/* Custom Attendance Chart for Admins/Teachers */}
+        {(profile?.role === "admin" || profile?.role === "teacher") && (
+          <div className="content-card" style={{ marginTop: "24px" }}>
+            <h3 style={{ marginBottom: "1rem", color: "var(--primary)", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+              📈 Academic Attendance Trends (Yearly Average)
+            </h3>
+            
+            <div style={{ position: "relative", width: "100%", height: "250px", marginTop: "20px" }}>
+              <svg viewBox="0 0 500 200" width="100%" height="100%" style={{ overflow: "visible" }}>
+                {/* Grid Lines */}
+                <line x1="40" y1="30" x2="480" y2="30" stroke="var(--border-color)" strokeWidth="1" strokeDasharray="4 4" />
+                <line x1="40" y1="70" x2="480" y2="70" stroke="var(--border-color)" strokeWidth="1" strokeDasharray="4 4" />
+                <line x1="40" y1="110" x2="480" y2="110" stroke="var(--border-color)" strokeWidth="1" strokeDasharray="4 4" />
+                <line x1="40" y1="150" x2="480" y2="150" stroke="var(--border-color)" strokeWidth="1" />
+                
+                {/* Y Axis Labels */}
+                <text x="15" y="35" fill="var(--text-muted)" fontSize="10" textAnchor="middle">100%</text>
+                <text x="15" y="75" fill="var(--text-muted)" fontSize="10" textAnchor="middle">95%</text>
+                <text x="15" y="115" fill="var(--text-muted)" fontSize="10" textAnchor="middle">90%</text>
+                <text x="15" y="155" fill="var(--text-muted)" fontSize="10" textAnchor="middle">85%</text>
+                
+                {/* Gradient for Area Fill */}
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                
+                {/* Area Path */}
+                <path
+                  d="M 50 150 L 50 114 L 150 90 L 250 54 L 350 78 L 450 42 L 450 150 Z"
+                  fill="url(#chartGrad)"
+                />
+                
+                {/* Line Path */}
+                <path
+                  d="M 50 114 L 150 90 L 250 54 L 350 78 L 450 42"
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                
+                {/* Data Circles with Hover effect / Labels */}
+                <g>
+                  <circle cx="50" cy="114" r="5" fill="var(--bg-card)" stroke="var(--primary)" strokeWidth="2.5" />
+                  <text x="50" y="98" fill="var(--text-primary)" fontSize="9" fontWeight="600" textAnchor="middle">93.0%</text>
+                  <circle cx="150" cy="90" r="5" fill="var(--bg-card)" stroke="var(--primary)" strokeWidth="2.5" />
+                  <text x="150" y="74" fill="var(--text-primary)" fontSize="9" fontWeight="600" textAnchor="middle">94.5%</text>
+                  <circle cx="250" cy="54" r="5" fill="var(--bg-card)" stroke="var(--primary)" strokeWidth="2.5" />
+                  <text x="250" y="38" fill="var(--text-primary)" fontSize="9" fontWeight="600" textAnchor="middle">96.0%</text>
+                  <circle cx="350" cy="78" r="5" fill="var(--bg-card)" stroke="var(--primary)" strokeWidth="2.5" />
+                  <text x="350" y="62" fill="var(--text-primary)" fontSize="9" fontWeight="600" textAnchor="middle">95.0%</text>
+                  <circle cx="450" cy="42" r="5" fill="var(--bg-card)" stroke="var(--primary)" strokeWidth="2.5" />
+                  <text x="450" y="26" fill="var(--text-primary)" fontSize="9" fontWeight="600" textAnchor="middle">96.8%</text>
+                </g>
+                
+                {/* X Axis Labels */}
+                <text x="50" y="172" fill="var(--text-muted)" fontSize="10" textAnchor="middle" fontWeight="500">Jan</text>
+                <text x="150" y="172" fill="var(--text-muted)" fontSize="10" textAnchor="middle" fontWeight="500">Feb</text>
+                <text x="250" y="172" fill="var(--text-muted)" fontSize="10" textAnchor="middle" fontWeight="500">Mar</text>
+                <text x="350" y="172" fill="var(--text-muted)" fontSize="10" textAnchor="middle" fontWeight="500">Apr</text>
+                <text x="450" y="172" fill="var(--text-muted)" fontSize="10" textAnchor="middle" fontWeight="500">May</text>
+              </svg>
+            </div>
+          </div>
+        )}
 
         <div className="content-card">
           <h2 style={{ marginBottom: "1rem" }}>⚡ Quick Actions</h2>

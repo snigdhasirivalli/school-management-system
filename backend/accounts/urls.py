@@ -5,6 +5,8 @@ from .views import (
     verify_otp,
     set_password,
     profile,
+    get_audit_logs,
+    update_profile,
 )
 
 urlpatterns = [
@@ -16,4 +18,8 @@ urlpatterns = [
     path('set-password/', set_password),
 
     path('profile/', profile),
+
+    path('audit-logs/', get_audit_logs),
+
+    path('update-profile/', update_profile),
 ]

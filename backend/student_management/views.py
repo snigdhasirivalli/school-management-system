@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from accounts.permissions import IsAdmin
 from accounts.models import User
+from accounts.utils import log_action
 from django.db import transaction
 
 from .models import Student, SchoolClass, Section, Subject, Teacher
@@ -45,11 +46,16 @@ def add_student(request):
                     user.set_password(password)
                     user.save()
 
-                # Update the payload with the created user's ID
                 data['user'] = user.id
                 serializer = StudentSerializer(data=data)
                 if serializer.is_valid():
-                    serializer.save()
+                    student = serializer.save()
+                    log_action(
+                        user=request.user,
+                        action="CREATE_STUDENT",
+                        details=f"Created student with username: {username}, email: {email} (Admission: {student.admission_number})",
+                        request=request
+                    )
                     return Response({
                         "message": "Student added successfully"
                     }, status=status.HTTP_201_CREATED)
@@ -68,7 +74,13 @@ def add_student(request):
         # Standard creation
         serializer = StudentSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            student = serializer.save()
+            log_action(
+                user=request.user,
+                action="CREATE_STUDENT",
+                details=f"Created student: {student.user.username if student.user else 'No User'} under standard flow (Admission: {student.admission_number})",
+                request=request
+            )
             return Response({
                 "message": "Student added successfully"
             }, status=status.HTTP_201_CREATED)
@@ -226,8 +238,16 @@ def delete_student(request, id):
         student = Student.objects.get(id=id)
         user = student.user
         with transaction.atomic():
+            student_details = f"Deleted student: {student.admission_number} ({user.email if user else 'No User'})"
             student.delete()
-            user.delete()
+            if user:
+                user.delete()
+            log_action(
+                user=request.user,
+                action="DELETE_STUDENT",
+                details=student_details,
+                request=request
+            )
         return Response({
             "message": "Student deleted successfully"
         })
@@ -390,7 +410,13 @@ def manage_teachers(request):
                 data['user'] = user.id
                 serializer = TeacherSerializer(data=data)
                 if serializer.is_valid():
-                    serializer.save()
+                    teacher = serializer.save()
+                    log_action(
+                        user=request.user,
+                        action="CREATE_TEACHER",
+                        details=f"Created teacher with username: {username}, email: {email} (Employee ID: {teacher.employee_id})",
+                        request=request
+                    )
                     return Response({
                         "message": "Teacher added successfully"
                     }, status=status.HTTP_201_CREATED)
@@ -441,8 +467,16 @@ def manage_teacher_detail(request, pk):
         try:
             with transaction.atomic():
                 user = teacher.user
+                teacher_details = f"Deleted teacher: {teacher.employee_id} ({user.email if user else 'No User'})"
                 teacher.delete()
-                user.delete()
+                if user:
+                    user.delete()
+                log_action(
+                    user=request.user,
+                    action="DELETE_TEACHER",
+                    details=teacher_details,
+                    request=request
+                )
                 return Response({"message": "Teacher deleted successfully"})
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

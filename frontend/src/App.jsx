@@ -15,6 +15,8 @@ import Classes from "./pages/Classes";
 import Teachers from "./pages/Teachers";
 import AddTeacher from "./pages/AddTeacher";
 import Reports from "./pages/Reports";
+import Profile from "./pages/Profile";
+import AuditLogs from "./pages/AuditLogs";
 
 function App() {
   return (
@@ -41,6 +43,10 @@ function App() {
         <Route path="/timetable" element={<Timetable />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/reports" element={<Reports />} />
+
+        {/* Profile & Logs */}
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/audit-logs" element={<AuditLogs />} />
       </Routes>
     </BrowserRouter>
   );

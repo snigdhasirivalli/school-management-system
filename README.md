@@ -30,6 +30,42 @@ Academix Pro is a modern, high-performance School Management System designed wit
 
 ---
 
+## 🏛️ System Architecture
+
+The following diagram represents the core architecture, data sync flow, and the interaction of newly implemented frontend/backend upgrades (Toasts, Skeletons, and Audit Logs logging hooks):
+
+```mermaid
+graph TD
+    subgraph Client [React Frontend (Vite)]
+        UI[User Interface]
+        TC[ToastContext / notifications]
+        SL[Skeleton Loaders]
+        DB[Dashboard / SVG Trends Chart]
+        PR[Profile Settings]
+        AL[Audit Logs Viewer]
+    end
+
+    subgraph Server [Django Backend]
+        API[DRF API views / JWT auth]
+        LH[Logging Hooks]
+        MOD[Models: User, AuditLog, Student, Teacher, Attendance, Mark]
+    end
+
+    subgraph Storage [Databases]
+        NEON[(Neon PostgreSQL - Production)]
+        SQLITE[(SQLite - Local Fallback)]
+    end
+
+    UI -->|User Interactions / JWT Auth| API
+    API -->|Logs Operations| LH
+    LH -->|Create Log Entry| MOD
+    API -->|Fetch/Update Data| MOD
+    MOD -->|Sync Prod| NEON
+    MOD -->|Sync Dev| SQLITE
+```
+
+---
+
 ## 🔐 Login Credentials (For Testing)
 
 A complete list of all 1,265 registered test accounts is exported in [credentials.csv](./credentials.csv). Here are the primary accounts to test each role:

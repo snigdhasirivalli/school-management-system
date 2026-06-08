@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
 
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("theme") || "light";
@@ -20,6 +21,8 @@ function Sidebar() {
 
   const handleLogout = () => {
     localStorage.removeItem("access");
+    localStorage.removeItem("role");
+    localStorage.removeItem("user_profile");
     navigate("/");
   };
 
@@ -36,62 +39,85 @@ function Sidebar() {
     { path: "/fees", label: "Fees Module", icon: "💳", roles: ["admin", "student"] },
     { path: "/timetable", label: "Timetable", icon: "🕒", roles: ["admin", "teacher", "student"] },
     { path: "/notifications", label: "Notifications", icon: "🔔", roles: ["admin", "teacher", "student"] },
-    { path: "/reports", label: "Reports", icon: "📊", roles: ["admin"] }
+    { path: "/reports", label: "Reports", icon: "📊", roles: ["admin"] },
+    { path: "/profile", label: "Profile Settings", icon: "⚙️", roles: ["admin", "teacher", "student"] },
+    { path: "/audit-logs", label: "Audit Logs", icon: "📋", roles: ["admin"] }
   ];
 
   const menuItems = allMenuItems.filter(item => item.roles.includes(role));
 
+  // Automatically close sidebar when navigation happens on mobile
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M16 2L2 9L16 16L30 9L16 2Z" fill="url(#logoGrad)" />
-          <path d="M2 17L16 24L30 17" stroke="url(#logoGrad)" strokeWidth="3" strokeLinecap="round" />
-          <path d="M6 22L16 29L26 22" stroke="url(#logoGrad)" strokeWidth="3" strokeLinecap="round" />
-          <defs>
-            <linearGradient id="logoGrad" x1="2" y1="2" x2="30" y2="29" gradientUnits="userSpaceOnUse">
-              <stop stopColor="var(--primary)" />
-              <stop offset="1" stopColor="var(--accent)" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <span className="logo-text">Academix Pro</span>
-      </div>
-      <ul className="sidebar-menu">
-        {menuItems.map((item) => (
-          <li
-            key={item.path}
-            className={`sidebar-item ${location.pathname === item.path ? "active" : ""}`}
+    <>
+      {/* Floating Hamburger toggle button for Mobile */}
+      <button 
+        className="sidebar-toggle"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Toggle Sidebar"
+      >
+        {isOpen ? "✕" : "☰"}
+      </button>
+
+      {/* Sidebar overlay backdrop to close drawer */}
+      {isOpen && (
+        <div className="sidebar-overlay" onClick={() => setIsOpen(false)} />
+      )}
+
+      <aside className={`sidebar ${isOpen ? "open" : ""}`}>
+        <div className="sidebar-brand">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 2L2 9L16 16L30 9L16 2Z" fill="url(#logoGrad)" />
+            <path d="M2 17L16 24L30 17" stroke="url(#logoGrad)" strokeWidth="3" strokeLinecap="round" />
+            <path d="M6 22L16 29L26 22" stroke="url(#logoGrad)" strokeWidth="3" strokeLinecap="round" />
+            <defs>
+              <linearGradient id="logoGrad" x1="2" y1="2" x2="30" y2="29" gradientUnits="userSpaceOnUse">
+                <stop stopColor="var(--primary)" />
+                <stop offset="1" stopColor="var(--accent)" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <span className="logo-text">Academix Pro</span>
+        </div>
+        <ul className="sidebar-menu">
+          {menuItems.map((item) => (
+            <li
+              key={item.path}
+              className={`sidebar-item ${location.pathname === item.path ? "active" : ""}`}
+            >
+              <Link to={item.path}>
+                <span className="sidebar-icon">{item.icon}</span>
+                <span className="sidebar-label">{item.label}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <div className="sidebar-footer">
+          <button
+            onClick={toggleTheme}
+            className="btn btn-secondary btn-block btn-sm"
+            style={{
+              marginBottom: "0.5rem",
+              justifyContent: "center",
+              background: "var(--bg-main)",
+              borderColor: "var(--border-color)",
+              fontWeight: "600"
+            }}
           >
-            <Link to={item.path}>
-              <span className="sidebar-icon">{item.icon}</span>
-              <span className="sidebar-label">{item.label}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <div className="sidebar-footer">
-        <button
-          onClick={toggleTheme}
-          className="btn btn-secondary btn-block btn-sm"
-          style={{
-            marginBottom: "0.5rem",
-            justifyContent: "center",
-            background: "var(--bg-main)",
-            borderColor: "var(--border-color)",
-            fontWeight: "600"
-          }}
-        >
-          {theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode"}
-        </button>
-        <button
-          onClick={handleLogout}
-          className="btn btn-danger btn-block btn-sm"
-        >
-          🚪 Logout
-        </button>
-      </div>
-    </aside>
+            {theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode"}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="btn btn-danger btn-block btn-sm"
+          >
+            🚪 Logout
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }
 

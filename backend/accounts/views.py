@@ -132,4 +132,67 @@ def profile(request):
         data['employee_id'] = teacher.employee_id
 
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_audit_logs(request):
+    from .permissions import IsAdmin
+    if not IsAdmin().has_permission(request, None):
+        return Response({"error": "Admin permission required"}, status=status.HTTP_403_FORBIDDEN)
+
+    from .models import AuditLog
+    from .serializers import AuditLogSerializer
+    logs = AuditLog.objects.select_related('actor').all().order_by('-timestamp')[:500]  # Cap at 500 for performance
+    serializer = AuditLogSerializer(logs, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    user = request.user
+    email = request.data.get('email')
+    phone = request.data.get('phone')
+    password = request.data.get('password')
+    username = request.data.get('username')
+
+    if email:
+        if User.objects.filter(email=email).exclude(id=user.id).exists():
+            return Response({"error": "Email already in use by another user"}, status=status.HTTP_400_BAD_REQUEST)
+        user.email = email
+
+    if phone:
+        if User.objects.filter(phone=phone).exclude(id=user.id).exists():
+            return Response({"error": "Phone number already in use by another user"}, status=status.HTTP_400_BAD_REQUEST)
+        user.phone = phone
+
+    if username:
+        if User.objects.filter(username=username).exclude(id=user.id).exists():
+            return Response({"error": "Username already in use"}, status=status.HTTP_400_BAD_REQUEST)
+        user.username = username
+
+    if password:
+        user.set_password(password)
+
+    user.save()
+
+    from .utils import log_action
+    log_action(
+        user=user,
+        action="UPDATE_PROFILE",
+        details=f"Updated profile details. Username: {user.username}, Email: {user.email}",
+        request=request
+    )
+
+    return Response({
+        "message": "Profile updated successfully",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role
+        }
+    })
     
