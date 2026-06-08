@@ -85,7 +85,7 @@ def get_students(request):
     school_class_id = request.query_params.get('school_class')
     section_id = request.query_params.get('section')
     
-    students = Student.objects.all()
+    students = Student.objects.select_related('user', 'school_class', 'section').all()
     
     # Role-based restriction
     if request.user.role == 'student':

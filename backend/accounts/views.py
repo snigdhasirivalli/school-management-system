@@ -141,7 +141,7 @@ def debug_view(request):
         from student_management.models import Student
         from student_management.serializers import StudentSerializer
         
-        students = Student.objects.all()
+        students = Student.objects.select_related('user', 'school_class', 'section').all()
         print("Debugging student serialization...")
         serializer = StudentSerializer(students, many=True)
         data = serializer.data
