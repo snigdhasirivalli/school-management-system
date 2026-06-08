@@ -132,28 +132,4 @@ def profile(request):
         data['employee_id'] = teacher.employee_id
 
     return Response(data)
-
-from django.http import JsonResponse
-import traceback
-
-def debug_view(request):
-    try:
-        from student_management.models import Student
-        from student_management.serializers import StudentSerializer
-        
-        students = Student.objects.select_related('user', 'school_class', 'section').all()
-        print("Debugging student serialization...")
-        serializer = StudentSerializer(students, many=True)
-        data = serializer.data
-        return JsonResponse({
-            "status": "success",
-            "count": len(data),
-            "first_few": data[:2]
-        })
-    except Exception as e:
-        return JsonResponse({
-            "status": "error",
-            "error_message": str(e),
-            "traceback": traceback.format_exc()
-        })
     
