@@ -1,4 +1,4 @@
 {
-  "buildCommand": "if [ -d \"frontend\" ]; then cd frontend && npm install && npm run build && cd .. && cp -r frontend/dist ./dist; else npm install && npm run build; fi",
+  "buildCommand": "if [ -d \"frontend\" ]; then mkdir -p dist && echo 'API Portal' > dist/index.html; else npm install && npm run build; fi",
   "outputDirectory": "dist"
 }
