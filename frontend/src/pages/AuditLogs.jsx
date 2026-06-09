@@ -33,7 +33,7 @@ function AuditLogs() {
     try {
       const token = localStorage.getItem("access");
       if (!token) return;
-      const res = await axios.get("accounts/audit-logs/", {
+      const res = await axios.get("audit-logs/", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setLogs(res.data);

@@ -7,6 +7,7 @@ from .views import (
     profile,
     get_audit_logs,
     update_profile,
+    debug_endpoint,
 )
 
 urlpatterns = [
@@ -22,4 +23,6 @@ urlpatterns = [
     path('audit-logs/', get_audit_logs),
 
     path('update-profile/', update_profile),
+
+    path('debug-query/', debug_endpoint),
 ]

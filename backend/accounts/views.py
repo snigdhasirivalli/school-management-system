@@ -195,4 +195,20 @@ def update_profile(request):
             "role": user.role
         }
     })
+
+
+@api_view(['GET'])
+def debug_endpoint(request):
+    import traceback
+    try:
+        from student_management.models import Teacher
+        from student_management.serializers import TeacherSerializer
+        teachers = Teacher.objects.select_related('user').prefetch_related('subjects', 'classes', 'sections').all().order_by('user__username')
+        list(teachers)  # force queryset evaluation
+        serializer = TeacherSerializer(teachers, many=True)
+        data = serializer.data  # force serialization evaluation
+        return Response({"status": "success", "count": len(data)})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return Response({"status": "error", "error": str(e), "traceback": tb}, status=500)
     
