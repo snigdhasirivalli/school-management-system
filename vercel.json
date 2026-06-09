@@ -1,4 +1,5 @@
 {
-  "buildCommand": "if [ -d \"frontend\" ]; then mkdir -p dist && echo 'API Portal' > dist/index.html; else npm install && npm run build; fi",
+  "ignoreCommand": "[ -d \"frontend\" ]",
+  "buildCommand": "npm install && npm run build",
   "outputDirectory": "dist"
 }
