@@ -199,16 +199,65 @@ def update_profile(request):
 
 @api_view(['GET'])
 def debug_endpoint(request):
-    import traceback
+    import time
+    from student_management.models import Teacher
+    
+    results = {}
+    
+    # Test 1: Count of teachers
     try:
-        from student_management.models import Teacher
-        from student_management.serializers import TeacherSerializer
-        teachers = Teacher.objects.select_related('user').prefetch_related('subjects', 'classes', 'sections').all().order_by('user__username')
-        list(teachers)  # force queryset evaluation
-        serializer = TeacherSerializer(teachers, many=True)
-        data = serializer.data  # force serialization evaluation
-        return Response({"status": "success", "count": len(data)})
+        t0 = time.time()
+        count = Teacher.objects.count()
+        results['count_teachers'] = {
+            'value': count,
+            'time': f"{time.time() - t0:.4f}s"
+        }
     except Exception as e:
-        tb = traceback.format_exc()
-        return Response({"status": "error", "error": str(e), "traceback": tb}, status=500)
+        results['count_teachers'] = {'error': str(e)}
+        
+    # Test 2: Fetch teachers simple values (without select/prefetch or ordering)
+    try:
+        t0 = time.time()
+        simple_list = list(Teacher.objects.values('id', 'employee_id')[:5])
+        results['simple_list'] = {
+            'value': simple_list,
+            'time': f"{time.time() - t0:.4f}s"
+        }
+    except Exception as e:
+        results['simple_list'] = {'error': str(e)}
+        
+    # Test 3: Fetch teachers with select_related user (without prefetch or order)
+    try:
+        t0 = time.time()
+        teachers_user = list(Teacher.objects.select_related('user').all()[:5])
+        results['teachers_user'] = {
+            'count': len(teachers_user),
+            'time': f"{time.time() - t0:.4f}s"
+        }
+    except Exception as e:
+        results['teachers_user'] = {'error': str(e)}
+
+    # Test 4: Fetch teachers with prefetch_related (without user or order)
+    try:
+        t0 = time.time()
+        teachers_prefetch = list(Teacher.objects.prefetch_related('subjects').all()[:5])
+        results['teachers_prefetch'] = {
+            'count': len(teachers_prefetch),
+            'time': f"{time.time() - t0:.4f}s"
+        }
+    except Exception as e:
+        results['teachers_prefetch'] = {'error': str(e)}
+        
+    # Test 5: Fetch teachers with user ordering only
+    try:
+        t0 = time.time()
+        teachers_order = list(Teacher.objects.all().order_by('user__username')[:5])
+        results['teachers_order'] = {
+            'count': len(teachers_order),
+            'time': f"{time.time() - t0:.4f}s"
+        }
+    except Exception as e:
+        results['teachers_order'] = {'error': str(e)}
+
+    return Response(results)
     
