@@ -199,42 +199,5 @@ def update_profile(request):
 
 @api_view(['GET'])
 def debug_endpoint(request):
-    import time
-    from django.db import connection
-    import traceback
-    
-    results = {}
-    
-    # Check current active processes in PostgreSQL
-    try:
-        t0 = time.time()
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT pid, query, state, 
-                       age(clock_timestamp(), query_start) as duration,
-                       wait_event_type, wait_event
-                FROM pg_stat_activity 
-                WHERE state != 'idle' AND query NOT LIKE '%pg_stat_activity%';
-            """)
-            rows = cursor.fetchall()
-            results['active_queries'] = [
-                {
-                    'pid': row[0],
-                    'query': row[1],
-                    'state': row[2],
-                    'duration': str(row[3]) if row[3] else None,
-                    'wait_event_type': row[4],
-                    'wait_event': row[5]
-                }
-                for row in rows
-            ]
-            results['query_time'] = f"{time.time() - t0:.4f}s"
-    except Exception as e:
-        results['query_error'] = str(e)
-        results['query_traceback'] = traceback.format_exc()
-        
-    # Let's also output a simple message to verify this view was updated
-    results['view_version'] = "pg_activity_v2"
-    
-    return Response(results)
+    return Response({"status": "deployed_v3"})
     
