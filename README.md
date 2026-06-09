@@ -70,6 +70,9 @@ graph TD
 
 The following class diagram represents the core database models, their fields, and relationships:
 
+![Database Class Diagram](./database_class_diagram.png)
+
+### Mermaid Text Representation
 ```mermaid
 classDiagram
     class User {
