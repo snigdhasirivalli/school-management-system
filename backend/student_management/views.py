@@ -48,24 +48,21 @@ def add_student(request):
 
                 data['user'] = user.id
                 serializer = StudentSerializer(data=data)
-                if serializer.is_valid():
-                    student = serializer.save()
-                    log_action(
-                        user=request.user,
-                        action="CREATE_STUDENT",
-                        details=f"Created student with username: {username}, email: {email} (Admission: {student.admission_number})",
-                        request=request
-                    )
-                    return Response({
-                        "message": "Student added successfully"
-                    }, status=status.HTTP_201_CREATED)
-                else:
-                    transaction.set_rollback(True)
-                    return Response(
-                        serializer.errors,
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                serializer.is_valid(raise_exception=True)
+                student = serializer.save()
+                log_action(
+                    user=request.user,
+                    action="CREATE_STUDENT",
+                    details=f"Created student with username: {username}, email: {email} (Admission: {student.admission_number})",
+                    request=request
+                )
+                return Response({
+                    "message": "Student added successfully"
+                }, status=status.HTTP_201_CREATED)
         except Exception as e:
+            from rest_framework.exceptions import ValidationError
+            if isinstance(e, ValidationError):
+                raise e
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -73,21 +70,17 @@ def add_student(request):
     else:
         # Standard creation
         serializer = StudentSerializer(data=request.data)
-        if serializer.is_valid():
-            student = serializer.save()
-            log_action(
-                user=request.user,
-                action="CREATE_STUDENT",
-                details=f"Created student: {student.user.username if student.user else 'No User'} under standard flow (Admission: {student.admission_number})",
-                request=request
-            )
-            return Response({
-                "message": "Student added successfully"
-            }, status=status.HTTP_201_CREATED)
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+        serializer.is_valid(raise_exception=True)
+        student = serializer.save()
+        log_action(
+            user=request.user,
+            action="CREATE_STUDENT",
+            details=f"Created student: {student.user.username if student.user else 'No User'} under standard flow (Admission: {student.admission_number})",
+            request=request
         )
+        return Response({
+            "message": "Student added successfully"
+        }, status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET'])

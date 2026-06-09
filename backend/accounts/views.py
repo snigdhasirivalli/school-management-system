@@ -138,8 +138,9 @@ def profile(request):
 @permission_classes([IsAuthenticated])
 def get_audit_logs(request):
     from .permissions import IsAdmin
+    from rest_framework.exceptions import PermissionDenied
     if not IsAdmin().has_permission(request, None):
-        return Response({"error": "Admin permission required"}, status=status.HTTP_403_FORBIDDEN)
+        raise PermissionDenied("Admin permission required")
 
     from .models import AuditLog
     from .serializers import AuditLogSerializer
