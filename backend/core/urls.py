@@ -2,9 +2,9 @@ from django.contrib import admin
 from django.urls import path, include
 
 from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
     TokenRefreshView,
 )
+from accounts.views import AuditLoggingTokenObtainPairView
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -29,13 +29,14 @@ urlpatterns = [
 
     path(
         'api/login/',
-        TokenObtainPairView.as_view()
+        AuditLoggingTokenObtainPairView.as_view()
     ),
 
     path(
         'api/token/refresh/',
         TokenRefreshView.as_view()
     ),
+
 
     path(
     'api/marks/',

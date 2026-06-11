@@ -201,4 +201,27 @@ def update_profile(request):
 @api_view(['GET'])
 def debug_endpoint(request):
     return Response({"status": "deployed_v3"})
+
+
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .utils import log_action
+
+class AuditLoggingTokenObtainPairView(TokenObtainPairView):
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            email = request.data.get('email')
+            if email:
+                try:
+                    user = User.objects.get(email=email)
+                    log_action(
+                        user=user,
+                        action="LOGIN",
+                        details=f"User successfully logged in. Role: {user.role}",
+                        request=request
+                    )
+                except User.DoesNotExist:
+                    pass
+        return response
+
     

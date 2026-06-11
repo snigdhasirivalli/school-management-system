@@ -197,6 +197,12 @@ def update_student(request, id):
                 serializer = StudentSerializer(student, data=data)
                 if serializer.is_valid():
                     serializer.save()
+                    log_action(
+                        user=request.user,
+                        action="UPDATE_STUDENT",
+                        details=f"Updated student user account details (Admission: {student.admission_number}). Username: {user.username}, Email: {user.email}",
+                        request=request
+                    )
                     return Response({
                         "message": "Student updated successfully"
                     })
@@ -215,6 +221,12 @@ def update_student(request, id):
         serializer = StudentSerializer(student, data=request.data)
         if serializer.is_valid():
             serializer.save()
+            log_action(
+                user=request.user,
+                action="UPDATE_STUDENT",
+                details=f"Updated student details (Admission: {student.admission_number})",
+                request=request
+            )
             return Response({
                 "message": "Student updated successfully"
             })
@@ -222,6 +234,7 @@ def update_student(request, id):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+
 
 
 @api_view(['DELETE'])
@@ -453,6 +466,12 @@ def manage_teacher_detail(request, pk):
                 serializer = TeacherSerializer(teacher, data=data)
                 if serializer.is_valid():
                     serializer.save()
+                    log_action(
+                        user=request.user,
+                        action="UPDATE_TEACHER",
+                        details=f"Updated teacher: {user.username} ({user.email}) (Employee ID: {teacher.employee_id})",
+                        request=request
+                    )
                     return Response({"message": "Teacher details updated successfully"})
                 else:
                     transaction.set_rollback(True)
